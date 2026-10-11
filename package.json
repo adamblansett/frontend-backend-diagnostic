@@ -1,0 +1,44 @@
+{
+  "name": "frontend-backend-diagnostic",
+  "version": "1.0.0",
+  "description": "Diagnose frontend/backend integration failures, including incorrect API URLs, CORS, authentication, and backend health.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "fbd": "./dist/cli/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "diagnostic": "tsx src/cli/index.ts",
+    "fbd": "tsx src/cli/index.ts"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/adamblansett/frontend-backend-diagnostic.git"
+  },
+  "keywords": [
+    "frontend",
+    "backend",
+    "diagnostic",
+    "api-integration",
+    "cors",
+    "rest-api",
+    "contract-testing",
+    "tracing"
+  ],
+  "author": "Adam Blansett",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^26.6.5",
+    "tsx": "^4.19.3",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.3"
+  },
+  "dependencies": {
+    "zod": "^4.6.5"
+  }
+}
