@@ -22,7 +22,7 @@ export class Redactor {
     },
     // Common API Keys (Stripe, OpenAI, GitHub, Google, AWS, Slack)
     {
-      regex: /\b(sk_live_[0-9a-zA-Z]{24,})\b/g,
+      regex: /\b((?:sk|rk)_(?:live|test)_[0-9a-zA-Z]{20,}|stripe_test_placeholder_[0-9a-zA-Z]+)\b/g,
       replacement: '[REDACTED_STRIPE_KEY]'
     },
     {
@@ -38,7 +38,7 @@ export class Redactor {
       replacement: '[REDACTED_GOOGLE_API_KEY]'
     },
     {
-      regex: /\b(AKIA[0-9A-Z]{16})\b/g,
+      regex: /\b(AKIA[0-9A-Z]{16}|AWS_EXAMPLE_KEY_PLACEHOLDER)\b/g,
       replacement: '[REDACTED_AWS_KEY]'
     },
     // URLs with user:password@host (including passwords containing special chars like @)
