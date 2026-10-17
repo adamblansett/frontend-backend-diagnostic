@@ -166,3 +166,32 @@ All 32 tests in the suite execute deterministically, testing the core rule engin
 - **Binary Protocols:** Current probes evaluate HTTP/1.1 and HTTP/2 REST endpoints; gRPC and binary protobuf inspection are planned for subsequent milestones.
 - **Dynamic URL Generation:** Deep runtime string concatenation with non-static variables requires active probing via `fbd probe` rather than static scan.
 - **Authorization Scopes:** Live probing verifies public and authenticated endpoints reachable from the execution host.
+
+---
+
+## 10. ⚖️ Legal Disclaimer & Limitation of Liability
+
+### 1. "AS IS" and Express Warranty Disclaimer
+This software, documentation, diagnostic heuristics, network probes, and automated repair engines are provided on an **"AS IS"** and **"AS AVAILABLE"** basis, **WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND**, either express, implied, statutory, or otherwise. To the maximum extent permitted by applicable law, the author, copyright holders, and contributors expressly disclaim all warranties, including but not limited to implied warranties of merchantability, fitness for a particular purpose, title, quiet enjoyment, and non-infringement.
+
+### 2. Active Probing & Authorized Network Testing
+- **Explicit Authorization Required:** The `fbd probe` command issues active network requests (DNS resolution, TCP socket connection, TLS handshakes, HTTP/HTTPS preflight, CORS inspection, and response parsing) to targeted hostnames and URLs.
+- Users must only execute network probes against endpoints, servers, and networks that they own or have received explicit, documented authorization to test.
+- Unauthorized scanning or probing may trigger web application firewalls (WAF), IP blocking, rate limiting, or violate cybercrime laws (including 18 U.S.C. § 1030). The user assumes full legal responsibility for all probe activities.
+
+### 3. Automated Configuration Repairs (`--fix`)
+- The automated repair engine (`--fix`) modifies configuration files (such as Next.js rewrites, Vite proxy tables, environment variable declarations, or CORS headers).
+- Users are strictly required to preview proposed diffs using `--dry-run` and verify changes in a development branch before applying fixes.
+- The author and contributors disclaim all liability for syntax errors, broken build configurations, unintended exposure of endpoints, or operational downtime resulting from automated fixes.
+
+### 4. Limitation of Liability
+To the maximum extent permitted by applicable law, **IN NO EVENT SHALL THE AUTHOR, COPYRIGHT HOLDERS, OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, PUNITIVE, OR CONSEQUENTIAL DAMAGES** (including, but not limited to, loss of use, data, revenue, profits, business, or goodwill; network disruptions; firewall bans; broken builds; downtime; or procurement of substitute goods or services), however caused and on any theory of liability, whether in contract, strict liability, tort (including negligence or otherwise), or statute, arising in any way out of the use, reproduction, modification, distribution, or reliance upon this software, even if advised of the possibility of such damages.
+
+### 5. Third-Party Trademarks & Non-Affiliation
+All product names, logos, brands, and registered trademarks mentioned within this project (including Next.js, Vite, React, Node.js, Express, FastAPI, and Vitest) are the property of their respective owners. Mention of these entities does not imply endorsement, sponsorship, or affiliation with the author.
+
+---
+
+## 11. 📄 License
+
+This project is open-source software licensed under the [MIT License](LICENSE).
