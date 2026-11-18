@@ -11,7 +11,8 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        node-version: [ 18.x, 20.x, 22.x ]
+        # vitest 5 requires Node ^22.12.0 || ^24.0.0
+        node-version: [ 22.x, 24.x ]
     steps:
       - uses: actions/checkout@v4
       - name: Use Node.js ${{ matrix.node-version }}
@@ -23,7 +24,16 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
-      - name: Verify CLI scan on fixtures
+      - name: Healthy fixture must scan clean
+        run: node dist/cli/index.js scan fixtures/healthy-app
+      - name: Broken fixture must be flagged (expected exit code 1)
         run: |
-          node dist/cli/index.js scan fixtures/healthy-app
-          node dist/cli/index.js scan fixtures/broken-app --format sarif > scan-results.sarif
+          set +e
+          node dist/cli/index.js scan fixtures/broken-app --format sarif --output scan-results.sarif
+          code=$?
+          set -e
+          if [ "$code" -ne 1 ]; then
+            echo "Expected exit code 1 for broken-app, got $code"
+            exit 1
+          fi
+          node -e "const r=JSON.parse(require('fs').readFileSync('scan-results.sarif','utf8')); if(r.version!=='2.1.0'||!r.runs[0].results.length){process.exit(1)}"

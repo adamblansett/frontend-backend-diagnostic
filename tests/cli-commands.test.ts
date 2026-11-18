@@ -5,6 +5,7 @@ import * as os from 'node:os';
 import { runInitCommand } from '../src/cli/commands/init.js';
 import { runRollbackCommand } from '../src/cli/commands/rollback.js';
 import { runContractCommand } from '../src/cli/commands/contract.js';
+import { createDefaultRuleRegistry } from '../src/rules/index.js';
 
 describe('CLI Commands: init, rollback, and contract formatting', () => {
   let tempDir: string;
@@ -25,8 +26,16 @@ describe('CLI Commands: init, rollback, and contract formatting', () => {
     expect(fs.existsSync(configPath)).toBe(true);
 
     const parsed = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-    expect(parsed.rules['FE-URL-001'].severity).toBe('CRITICAL');
-    expect(parsed.rules['FE-TIME-001'].severity).toBe('WARN');
+    const registryRules = createDefaultRuleRegistry().getAllRules();
+    // Every generated rule ID must exist in the registry, and vice versa
+    expect(Object.keys(parsed.rules).sort()).toEqual(registryRules.map((r) => r.id).sort());
+    for (const rule of registryRules) {
+      expect(parsed.rules[rule.id].severity).toBe(rule.severity);
+    }
+    const validSeverities = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'INFORMATIONAL'];
+    for (const cfg of Object.values(parsed.rules) as Array<{ severity: string }>) {
+      expect(validSeverities).toContain(cfg.severity);
+    }
     expect(parsed.ignorePaths).toContain('.fbd-backup');
   });
 
