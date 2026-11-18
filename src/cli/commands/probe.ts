@@ -1,3 +1,5 @@
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import { NetworkTracer } from '../../probe/network-tracer.js';
 
 export interface ProbeCommandOptions {
@@ -8,13 +10,19 @@ export interface ProbeCommandOptions {
   timeoutMs?: number;
   origin?: string;
   checkCors?: boolean;
+  format?: 'console' | 'json';
+  output?: string;
 }
 
 export async function runProbeCommand(options: ProbeCommandOptions): Promise<number> {
-  console.log(`\nInitiating Live Request Trace to: ${options.url}`);
-  console.log(`Method: ${options.method || 'GET'}`);
-  if (options.origin) {
-    console.log(`CORS Origin: ${options.origin}`);
+  const isJson = options.format === 'json';
+
+  if (!isJson) {
+    console.log(`\nInitiating Live Request Trace to: ${options.url}`);
+    console.log(`Method: ${options.method || 'GET'}`);
+    if (options.origin) {
+      console.log(`CORS Origin: ${options.origin}`);
+    }
   }
 
   const trace = await NetworkTracer.probeEndpoint(options.url, options.method || 'GET', {
@@ -24,6 +32,17 @@ export async function runProbeCommand(options: ProbeCommandOptions): Promise<num
     origin: options.origin,
     checkCors: Boolean(options.origin || options.checkCors)
   });
+
+  if (isJson) {
+    const jsonOutput = JSON.stringify(trace, null, 2);
+    if (options.output) {
+      fs.writeFileSync(path.resolve(options.output), jsonOutput, 'utf8');
+      console.log(`Probe trace JSON written to ${options.output}`);
+    } else {
+      console.log(jsonOutput);
+    }
+    return trace.findings.length > 0 ? 1 : 0;
+  }
 
   console.log('\n--- 15-STAGE LIFECYCLE TRACE ---');
   for (const st of trace.stages) {
@@ -52,7 +71,16 @@ export async function runProbeCommand(options: ProbeCommandOptions): Promise<num
       console.log(`  Root cause: ${f.rootCause}`);
       console.log(`  Fix: ${f.recommendedCorrection}`);
     }
+    if (options.output) {
+      fs.writeFileSync(path.resolve(options.output), JSON.stringify(trace, null, 2), 'utf8');
+      console.log(`\nProbe trace report written to ${options.output}`);
+    }
     return 1;
+  }
+
+  if (options.output) {
+    fs.writeFileSync(path.resolve(options.output), JSON.stringify(trace, null, 2), 'utf8');
+    console.log(`\nProbe trace report written to ${options.output}`);
   }
 
   return 0;

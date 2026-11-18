@@ -95,13 +95,41 @@ fbd probe http://localhost:3000/api/users --method GET
 
 # Probe with custom CORS origin simulation
 fbd probe http://localhost:3000/api/users --method POST --origin http://localhost:5173
+
+# Probe output as structured JSON for CI/CD synthetic uptime checks
+fbd probe http://localhost:3000/api/users --format json --output trace.json
 ```
 
 ### API Contract Agreement Analysis (`contract`)
 Extracts frontend API consumption patterns, TypeScript AST destructuring, template literals, backend route handlers, and formal OpenAPI 3.0/3.1 specifications to detect contract drift.
 
 ```bash
+# Console audit
 fbd contract ./my-project
+
+# Output formatted Markdown report or JSON for CI verification
+fbd contract ./my-project --format markdown --output contract-report.md
+fbd contract ./my-project --format json --output contract.json
+```
+
+### Rollback Safe Fixes (`rollback`)
+Reverts the workspace to the snapshot taken automatically before repairs were applied:
+
+```bash
+# Roll back to the most recent backup snapshot in .fbd-backup/
+fbd rollback ./my-project
+
+# Roll back to a specific timestamped snapshot
+fbd rollback ./my-project --backup-id 2026-11-18T05-00-00Z
+```
+
+### Initialize Configuration (`init`)
+Bootstraps a recommended `.fbdrc.json` configuration file in the target workspace:
+
+```bash
+fbd init
+# Or overwrite existing configuration
+fbd init --force
 ```
 
 ---

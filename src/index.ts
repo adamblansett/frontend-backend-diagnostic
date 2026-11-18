@@ -13,3 +13,5 @@ export * from './reporters/json-reporter.js';
 export * from './reporters/console-reporter.js';
 export * from './reporters/sarif-reporter.js';
 export * from './rules/index.js';
+export * from './cli/commands/init.js';
+export * from './cli/commands/rollback.js';
