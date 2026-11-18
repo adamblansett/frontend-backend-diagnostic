@@ -27,11 +27,22 @@ export function runRollbackCommand(options: RollbackCommandOptions = {}): number
   }
 
   let selectedBackup = options.backupId;
-  if (!selectedBackup) {
+  if (selectedBackup) {
+    // Validate that backupId is a simple single-segment directory name
+    if (selectedBackup.includes('..') || selectedBackup.includes('/') || selectedBackup.includes('\\') || path.basename(selectedBackup) !== selectedBackup) {
+      console.error(`❌ Invalid backup ID "${selectedBackup}": Path traversal characters are not permitted.`);
+      return 1;
+    }
+  } else {
     selectedBackup = entries[entries.length - 1]; // pick newest
   }
 
-  const backupDir = path.join(backupBase, selectedBackup!);
+  const backupDir = path.resolve(backupBase, selectedBackup!);
+  const resolvedBase = path.resolve(backupBase);
+  if (!backupDir.startsWith(resolvedBase + path.sep)) {
+    console.error(`❌ Security validation failed: Snapshot path escapes backup directory.`);
+    return 1;
+  }
   if (!fs.existsSync(backupDir)) {
     console.error(`❌ Snapshot "${selectedBackup}" not found in ${backupBase}. Available snapshots:\n${entries.map((e) => '  - ' + e).join('\n')}`);
     return 1;

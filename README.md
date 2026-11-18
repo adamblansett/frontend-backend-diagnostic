@@ -136,7 +136,7 @@ fbd init --force
 
 ## 5. Diagnostic Rule Catalog
 
-`fbd` includes 14 modular, decoupled rules categorized by integration layer:
+`fbd` includes 16 modular, decoupled rules categorized by integration layer:
 
 | Rule ID | Category | Severity | Description | Auto-Repair |
 | :--- | :--- | :--- | :--- | :---: |
@@ -148,6 +148,8 @@ fbd init --force
 | `BE-ERR-001` | `ERROR_HANDLING` | HIGH | Flags backend catch blocks returning HTTP 200 OK for error payloads, bypassing client interceptors | No |
 | `BE-RTE-001` | `ROUTING_HTTP_SEMANTICS` | MEDIUM | Detects trailing slash inconsistencies causing 404s or payload-dropping 301 redirects | Yes |
 | `BE-HLT-001` | `DATABASE_DEPENDENCIES` | MEDIUM | Verifies presence of operational health check endpoints (`/health`, `/healthz`, `/status`) | No |
+| `SEC-INJ-001` | `AUTHENTICATION_SECURITY` | CRITICAL | Detects raw SQL queries formed with string concatenation or unparameterized template interpolation | No |
+| `SEC-HDR-001` | `AUTHENTICATION_SECURITY` | HIGH | Flags backend server entrypoints omitting standard HTTP security headers (Helmet / HSTS / nosniff) | No |
 | `SEC-CSRF-001` | `AUTHENTICATION_SECURITY` | HIGH | Detects mutation routes reading cookies without CSRF validation middleware or SameSite protection | No |
 | `SEC-STORE-001` | `AUTHENTICATION_SECURITY` | HIGH | Detects sensitive credentials (tokens, JWTs, secrets) stored in browser `localStorage` or `sessionStorage` | No |
 | `NET-CACHE-001` | `CACHING_STATE_MANAGEMENT` | MEDIUM | Detects state mutations returning public Cache-Control headers causing stale responses from proxies | No |

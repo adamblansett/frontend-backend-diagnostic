@@ -20,26 +20,58 @@ export class Redactor {
       regex: /\beyJ[a-zA-Z0-9_-]{10,}\.eyJ[a-zA-Z0-9_-]{10,}\.[a-zA-Z0-9_-]{10,}\b/g,
       replacement: '[REDACTED_JWT]'
     },
-    // Common API Keys (Stripe, OpenAI, GitHub, Google, AWS, Slack)
+    // GitHub Personal Access Tokens & OAuth tokens
+    {
+      regex: /\b(github_pat_[0-9a-zA-Z_]{82})\b/g,
+      replacement: '[REDACTED_GITHUB_TOKEN]'
+    },
+    {
+      regex: /\b(gh[pousr]_[0-9a-zA-Z]{36,})\b/g,
+      replacement: '[REDACTED_GITHUB_TOKEN]'
+    },
+    // Slack Tokens
+    {
+      regex: /\b(xox[bpar]-[0-9a-zA-Z\-]{24,})\b/g,
+      replacement: '[REDACTED_SLACK_TOKEN]'
+    },
+    // Anthropic API Keys
+    {
+      regex: /\b(sk-ant-api03-[a-zA-Z0-9_\-]{80,})\b/g,
+      replacement: '[REDACTED_ANTHROPIC_KEY]'
+    },
+    // SendGrid API Keys
+    {
+      regex: /\b(SG\.[a-zA-Z0-9_\-]{22}\.[a-zA-Z0-9_\-]{43})\b/g,
+      replacement: '[REDACTED_SENDGRID_KEY]'
+    },
+    // Stripe API Keys
     {
       regex: /\b((?:sk|rk)_(?:live|test)_[0-9a-zA-Z]{20,}|stripe_test_placeholder_[0-9a-zA-Z]+)\b/g,
       replacement: '[REDACTED_STRIPE_KEY]'
     },
+    // OpenAI and Generic sk- API Keys
     {
       regex: /\b(sk-[a-zA-Z0-9]{32,})\b/g,
       replacement: '[REDACTED_API_KEY]'
     },
-    {
-      regex: /\b(ghp_[0-9a-zA-Z]{36})\b/g,
-      replacement: '[REDACTED_GITHUB_TOKEN]'
-    },
+    // Google API Keys
     {
       regex: /\b(AIza[0-9A-Za-z-_]{35})\b/g,
       replacement: '[REDACTED_GOOGLE_API_KEY]'
     },
+    // AWS Access Key IDs & Temporary Session Keys
     {
-      regex: /\b(AKIA[0-9A-Z]{16}|AWS_EXAMPLE_KEY_PLACEHOLDER)\b/g,
+      regex: /\b((?:AKIA|ASIA)[0-9A-Z]{16}|AWS_EXAMPLE_KEY_PLACEHOLDER)\b/g,
       replacement: '[REDACTED_AWS_KEY]'
+    },
+    // NPM and PyPI Access Tokens
+    {
+      regex: /\b(npm_[a-zA-Z0-9]{36})\b/g,
+      replacement: '[REDACTED_NPM_TOKEN]'
+    },
+    {
+      regex: /\b(pypi-AgEIcHlwaS5vcmc[a-zA-Z0-9_\-]{50,})\b/g,
+      replacement: '[REDACTED_PYPI_TOKEN]'
     },
     // URLs with user:password@host (including passwords containing special chars like @)
     {
@@ -71,7 +103,7 @@ export class Redactor {
   }
 
   /**
-   * Recursively redacts sensitive values inside objects, arrays, and primitive fields.
+   * Deeply redacts sensitive properties and string values from an object or array.
    */
   public static redactObject<T>(obj: T): T {
     if (obj === null || obj === undefined) return obj;
@@ -85,17 +117,17 @@ export class Redactor {
     }
 
     if (typeof obj === 'object') {
-      const result: Record<string, unknown> = {};
-      const sensitiveKeys = /password|secret|apikey|api_key|token|authorization|cookie|private/i;
+      const copy: Record<string, any> = {};
+      const sensitiveKeys = /password|secret|apikey|api_key|token|authorization|cookie|private|key/i;
 
       for (const [key, value] of Object.entries(obj)) {
         if (sensitiveKeys.test(key) && typeof value === 'string') {
-          result[key] = '[REDACTED_SECRET]';
+          copy[key] = '[REDACTED_SECRET]';
         } else {
-          result[key] = this.redactObject(value);
+          copy[key] = this.redactObject(value);
         }
       }
-      return result as unknown as T;
+      return copy as T;
     }
 
     return obj;

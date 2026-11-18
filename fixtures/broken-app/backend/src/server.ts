@@ -26,6 +26,13 @@ app.post('/api/v1/users/', (req, res) => {
   res.json({ success: true });
 });
 
+app.get('/api/v1/users/search', (req, res) => {
+  const query = req.query.q;
+  // Defect: SQL Injection via unparameterized query
+  (global as any).db?.query(`SELECT * FROM users WHERE name LIKE '%${query}%'`);
+  res.json([]);
+});
+
 // Defect 5: Listens on port 3001, but frontend env has port 4000
 // Defect 6: Missing /health endpoint
 app.listen(3001, () => {

@@ -195,26 +195,39 @@ export class SafeRepairEngine {
    * Restores files from a backup snapshot.
    */
   public static rollback(backupDir: string, workspaceRoot: string): void {
-    if (!fs.existsSync(backupDir)) {
-      throw new Error(`Backup directory "${backupDir}" does not exist.`);
+    const resolvedBackup = path.resolve(backupDir);
+    const resolvedRoot = path.resolve(workspaceRoot);
+
+    if (!fs.existsSync(resolvedBackup)) {
+      throw new Error(`Backup directory "${resolvedBackup}" does not exist.`);
     }
 
     const restoreDir = (dir: string) => {
       const entries = fs.readdirSync(dir, { withFileTypes: true });
       for (const entry of entries) {
+        if (entry.isSymbolicLink()) {
+          // Reject restoring symlinks to prevent symlink traversal attacks
+          continue;
+        }
         const full = path.join(dir, entry.name);
         if (entry.isDirectory()) {
           restoreDir(full);
         } else if (entry.isFile()) {
-          const rel = path.relative(backupDir, full);
-          const target = path.join(workspaceRoot, rel);
+          const rel = path.relative(resolvedBackup, full);
+          const target = path.resolve(resolvedRoot, rel);
+
+          // Path containment check: ensure target does not escape workspace root
+          if (!target.startsWith(resolvedRoot + path.sep) && target !== resolvedRoot) {
+            throw new Error(`Security validation failed: restoration target "${target}" escapes workspace root "${resolvedRoot}".`);
+          }
+
           fs.mkdirSync(path.dirname(target), { recursive: true });
           fs.copyFileSync(full, target);
         }
       }
     };
 
-    restoreDir(backupDir);
+    restoreDir(resolvedBackup);
   }
 
   /**

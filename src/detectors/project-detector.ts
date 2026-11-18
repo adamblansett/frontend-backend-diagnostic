@@ -185,15 +185,29 @@ export class ProjectDetector {
     };
   }
 
-  private static collectFiles(dir: string, fileList: string[] = [], ignorePatterns: string[] = []): string[] {
+  private static collectFiles(dir: string, fileList: string[] = [], ignorePatterns: string[] = [], rootDir?: string): string[] {
+    const resolvedRoot = rootDir ? path.resolve(rootDir) : path.resolve(dir);
     if (!fs.existsSync(dir)) return fileList;
     try {
       const entries = fs.readdirSync(dir, { withFileTypes: true });
       for (const entry of entries) {
         const fullPath = path.join(dir, entry.name);
+
+        // Security: Avoid traversing symlinks that point outside the workspace root
+        if (entry.isSymbolicLink()) {
+          try {
+            const real = fs.realpathSync(fullPath);
+            if (!real.startsWith(resolvedRoot + path.sep) && real !== resolvedRoot) {
+              continue; // Skip external symlink
+            }
+          } catch {
+            continue; // Broken symlink
+          }
+        }
+
         if (entry.isDirectory()) {
           if (!this.DEFAULT_IGNORED_DIRS.has(entry.name) && !this.isIgnored(entry.name, ignorePatterns)) {
-            this.collectFiles(fullPath, fileList, ignorePatterns);
+            this.collectFiles(fullPath, fileList, ignorePatterns, resolvedRoot);
           }
         } else if (entry.isFile()) {
           if (!this.isIgnored(entry.name, ignorePatterns)) {

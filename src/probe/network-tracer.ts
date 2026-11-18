@@ -87,6 +87,150 @@ export class NetworkTracer {
       details: `Configured API client for ${method} ${url}`
     });
 
+    // Validate URL syntax and enforce protocol safety
+    let parsedUrl: URL;
+    try {
+      parsedUrl = new URL(url);
+    } catch {
+      return {
+        url,
+        method,
+        durationMs: Date.now() - startTime,
+        earliestFailureStage: '4_API_CLIENT',
+        failureClassification: 'INVALID_URL_FORMAT',
+        stages: [
+          ...stages,
+          {
+            stage: '5_NETWORK_REQUEST',
+            status: 'FAILED',
+            details: `Malformed target URL: ${url}`
+          }
+        ],
+        findings: [
+          {
+            id: 'FINDING-SEC-PROBE-01',
+            ruleId: 'INVALID_PROBE_URL',
+            title: `Invalid probe URL: ${url}`,
+            severity: 'CRITICAL',
+            category: 'API_CLIENT_CONFIGURATION',
+            affectedComponent: 'API Client / Network Tracer',
+            affectedEndpoint: url,
+            symptoms: ['URL constructor threw TypeError'],
+            evidence: {
+              description: `Malformed target URL: ${url}`,
+              url
+            },
+            reproductionSteps: [`fbd probe "${url}"`],
+            expectedBehavior: 'Target URL must be a valid HTTP or HTTPS URI',
+            actualBehavior: 'URL is invalid or malformed',
+            rootCause: 'Target URI cannot be parsed as a standard URL',
+            confidenceLevel: 'HIGH',
+            impact: 'Probe cannot execute',
+            recommendedCorrection: 'Provide a valid http:// or https:// endpoint',
+            regressionTestRequirements: ['Probe URL validation test'],
+            repairable: false
+          }
+        ]
+      };
+    }
+
+    // Enforce safe protocols (reject file:, gopher:, ftp:, javascript:, etc.)
+    if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
+      return {
+        url,
+        method,
+        durationMs: Date.now() - startTime,
+        earliestFailureStage: '4_API_CLIENT',
+        failureClassification: 'INSECURE_PROTOCOL_BLOCKED',
+        stages: [
+          ...stages,
+          {
+            stage: '5_NETWORK_REQUEST',
+            status: 'FAILED',
+            details: `Protocol ${parsedUrl.protocol} is disallowed for integration probes. Only http: and https: are permitted.`
+          }
+        ],
+        findings: [
+          {
+            id: 'FINDING-SEC-PROBE-02',
+            ruleId: 'INSECURE_PROBE_PROTOCOL',
+            title: `Insecure or non-HTTP protocol blocked: ${parsedUrl.protocol}`,
+            severity: 'CRITICAL',
+            category: 'AUTHENTICATION_SECURITY',
+            affectedComponent: 'Network Tracer / Security Guard',
+            affectedEndpoint: url,
+            symptoms: [`Probe blocked protocol ${parsedUrl.protocol}`],
+            evidence: {
+              description: `Protocol ${parsedUrl.protocol} blocked by SSRF/protocol security filter`,
+              url,
+              observedData: { protocol: parsedUrl.protocol }
+            },
+            reproductionSteps: [`fbd probe "${url}"`],
+            expectedBehavior: 'Integration probes must exclusively target HTTP or HTTPS endpoints',
+            actualBehavior: `Attempted to probe unsupported or potentially dangerous scheme "${parsedUrl.protocol}"`,
+            rootCause: 'Non-HTTP URI schemes present arbitrary protocol injection and SSRF risks',
+            confidenceLevel: 'HIGH',
+            impact: 'Blocked unauthorized protocol execution',
+            recommendedCorrection: 'Use http:// or https:// URLs only',
+            regressionTestRequirements: ['Protocol validation test'],
+            repairable: false
+          }
+        ]
+      };
+    }
+
+    // SSRF Guard: Block cloud instance metadata services
+    const hostname = parsedUrl.hostname.toLowerCase();
+    if (
+      hostname === '169.254.169.254' ||
+      hostname === 'metadata.google.internal' ||
+      hostname === 'metadata.internal' ||
+      hostname === '100.100.100.200' ||
+      hostname === 'fd00:ec2::254'
+    ) {
+      return {
+        url,
+        method,
+        durationMs: Date.now() - startTime,
+        earliestFailureStage: '5_NETWORK_REQUEST',
+        failureClassification: 'SSRF_METADATA_PROBE_BLOCKED',
+        stages: [
+          ...stages,
+          {
+            stage: '5_NETWORK_REQUEST',
+            status: 'FAILED',
+            details: `Blocked SSRF probe targeting cloud instance metadata service (${hostname})`
+          }
+        ],
+        findings: [
+          {
+            id: 'FINDING-SEC-SSRF-01',
+            ruleId: 'CLOUD_METADATA_SSRF_BLOCKED',
+            title: `Cloud Instance Metadata SSRF probe attempt blocked on ${hostname}`,
+            severity: 'CRITICAL',
+            category: 'AUTHENTICATION_SECURITY',
+            affectedComponent: 'Network Tracer / SSRF Guard',
+            affectedEndpoint: url,
+            symptoms: ['Probe attempted to access cloud instance metadata IP/hostname'],
+            evidence: {
+              description: `Probe attempted to access cloud metadata endpoint: ${hostname}`,
+              url,
+              observedData: { hostname }
+            },
+            reproductionSteps: [`fbd probe "${url}"`],
+            expectedBehavior: 'Probe must not target cloud instance metadata infrastructure',
+            actualBehavior: `Probe targeted ${hostname}, which exposes sensitive cloud IAM credentials and identity tokens`,
+            rootCause: 'SSRF attempts against cloud metadata endpoints can exfiltrate machine credentials',
+            confidenceLevel: 'HIGH',
+            impact: 'Protected infrastructure credentials from accidental or adversarial exposure',
+            recommendedCorrection: 'Target application API endpoints instead of cloud infrastructure metadata',
+            regressionTestRequirements: ['Cloud metadata SSRF prevention test'],
+            repairable: false
+          }
+        ]
+      };
+    }
+
     // Optional CORS preflight check if requested or origin specified
     if (options.checkCors || options.origin) {
       const probeOrigin = options.origin || 'http://localhost:3000';
