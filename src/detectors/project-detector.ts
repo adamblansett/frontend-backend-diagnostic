@@ -1,6 +1,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { DiagnosticContext } from '../types/index.js';
+import { ConfigLoader } from './config-loader.js';
 
 export interface ProjectScanResult {
   detectedFrameworks: DiagnosticContext['detectedFrameworks'];
@@ -11,7 +12,7 @@ export interface ProjectScanResult {
 }
 
 export class ProjectDetector {
-  private static readonly IGNORED_DIRS = new Set([
+  private static readonly DEFAULT_IGNORED_DIRS = new Set([
     'node_modules',
     '.git',
     'dist',
@@ -19,14 +20,21 @@ export class ProjectDetector {
     '.next',
     '.nuxt',
     'coverage',
-    '.turbo'
+    '.turbo',
+    '.fbd-backup'
   ]);
 
   public static async scanWorkspace(
     workspaceRoot: string,
     options: DiagnosticContext['options'] = {}
   ): Promise<DiagnosticContext> {
-    const allFiles = this.collectFiles(workspaceRoot);
+    const config = options.config || ConfigLoader.loadConfig(workspaceRoot);
+    const ignorePaths = [
+      ...(options.ignorePaths || []),
+      ...(config?.ignorePaths || [])
+    ];
+
+    const allFiles = this.collectFiles(workspaceRoot, [], ignorePaths);
     const envFiles = allFiles.filter((f) => {
       const base = path.basename(f);
       return base.startsWith('.env') || base.endsWith('.env');
@@ -40,7 +48,12 @@ export class ProjectDetector {
         base === 'tsconfig.json' ||
         base === 'openapi.json' ||
         base === 'openapi.yaml' ||
-        base === 'swagger.json'
+        base === 'openapi.yml' ||
+        base === 'swagger.json' ||
+        base === 'swagger.yaml' ||
+        base === 'swagger.yml' ||
+        base === '.fbdrc.json' ||
+        base === 'fbd.config.json'
       );
     });
 
@@ -88,11 +101,26 @@ export class ProjectDetector {
         rel.endsWith('.jsx') ||
         rel.endsWith('.tsx')
       ) {
-        // Fallback: analyze imports or heuristics
         const content = this.safeReadFile(file);
-        if (content.includes('express') || content.includes('fastify') || content.includes('req, res') || content.includes('Router()')) {
+        if (
+          content.includes('express') ||
+          content.includes('fastify') ||
+          content.includes('req, res') ||
+          content.includes('Router()') ||
+          content.includes('NextResponse') ||
+          content.includes('@nestjs')
+        ) {
           backendFiles.push(file);
-        } else if (content.includes('fetch(') || content.includes('axios') || content.includes('useState') || content.includes('React')) {
+        } else if (
+          content.includes('fetch(') ||
+          content.includes('axios') ||
+          content.includes('useState') ||
+          content.includes('React') ||
+          content.includes('localStorage') ||
+          content.includes('sessionStorage') ||
+          content.includes('window.') ||
+          content.includes('document.')
+        ) {
           frontendFiles.push(file);
         }
       }
@@ -136,7 +164,7 @@ export class ProjectDetector {
       detectedFrameworks: {
         frontend: frontend || (frontendFiles.length > 0 ? 'Generic Frontend' : undefined),
         backend: backend || (backendFiles.length > 0 ? 'Generic Backend' : undefined),
-        apiType: openApiPaths.length > 0 ? 'REST' : 'REST',
+        apiType: 'REST',
         hasOpenApi: openApiPaths.length > 0,
         openApiPaths
       },
@@ -147,27 +175,48 @@ export class ProjectDetector {
       interactive: false,
       authorizationGranted: false,
       dryRun: false,
-      options
+      options: {
+        ...options,
+        config,
+        categories: options.categories || config?.categories,
+        strict: options.strict ?? config?.strict,
+        verbose: options.verbose ?? config?.verbose
+      }
     };
   }
 
-  private static collectFiles(dir: string, fileList: string[] = []): string[] {
+  private static collectFiles(dir: string, fileList: string[] = [], ignorePatterns: string[] = []): string[] {
     if (!fs.existsSync(dir)) return fileList;
     try {
       const entries = fs.readdirSync(dir, { withFileTypes: true });
       for (const entry of entries) {
+        const fullPath = path.join(dir, entry.name);
         if (entry.isDirectory()) {
-          if (!this.IGNORED_DIRS.has(entry.name)) {
-            this.collectFiles(path.join(dir, entry.name), fileList);
+          if (!this.DEFAULT_IGNORED_DIRS.has(entry.name) && !this.isIgnored(entry.name, ignorePatterns)) {
+            this.collectFiles(fullPath, fileList, ignorePatterns);
           }
         } else if (entry.isFile()) {
-          fileList.push(path.join(dir, entry.name));
+          if (!this.isIgnored(entry.name, ignorePatterns)) {
+            fileList.push(fullPath);
+          }
         }
       }
     } catch {
       // Ignore unreadable dirs
     }
     return fileList;
+  }
+
+  private static isIgnored(fileNameOrPath: string, ignorePatterns: string[]): boolean {
+    for (const pattern of ignorePatterns) {
+      if (pattern.includes('*')) {
+        const regex = new RegExp('^' + pattern.replace(/\./g, '\\.').replace(/\*\*/g, '.*').replace(/\*/g, '[^/]*') + '$');
+        if (regex.test(fileNameOrPath)) return true;
+      } else if (fileNameOrPath.includes(pattern)) {
+        return true;
+      }
+    }
+    return false;
   }
 
   private static safeReadFile(file: string): string {

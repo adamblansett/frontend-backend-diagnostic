@@ -43,6 +43,8 @@ export interface PatchOperation {
   replacementText: string;
   lineStart?: number;
   lineEnd?: number;
+  offsetStart?: number;
+  offsetEnd?: number;
 }
 
 export interface DiagnosticFinding {
@@ -76,6 +78,23 @@ export interface RuleExecutionResult {
   error?: string;
 }
 
+export interface RuleOverrideConfig {
+  enabled?: boolean;
+  severity?: Severity;
+}
+
+export interface FbdConfig {
+  ignorePaths?: string[];
+  categories?: DiagnosticCategory[];
+  rules?: Record<string, RuleOverrideConfig>;
+  strict?: boolean;
+  verbose?: boolean;
+  probe?: {
+    defaultTimeoutMs?: number;
+    expectedOrigin?: string;
+  };
+}
+
 export interface DiagnosticContext {
   workspaceRoot: string;
   detectedFrameworks: {
@@ -96,6 +115,8 @@ export interface DiagnosticContext {
     categories?: DiagnosticCategory[];
     strict?: boolean;
     verbose?: boolean;
+    ignorePaths?: string[];
+    config?: FbdConfig;
   };
 }
 

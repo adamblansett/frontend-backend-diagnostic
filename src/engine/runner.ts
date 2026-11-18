@@ -2,10 +2,12 @@ import {
   DiagnosticContext,
   DiagnosticFinding,
   DiagnosticRunSummary,
+  PatchOperation,
   RuleExecutionResult
 } from '../types/index.js';
 import { Redactor } from './redactor.js';
 import { RuleRegistry } from './registry.js';
+import { SafeRepairEngine } from './repair.js';
 
 export class DiagnosticRunner {
   constructor(private registry: RuleRegistry) {}
@@ -17,6 +19,7 @@ export class DiagnosticRunner {
     const allFindings: DiagnosticFinding[] = [];
 
     const requestedCategories = context.options.categories;
+    const ruleConfigs = context.options.config?.rules || {};
 
     let passedCount = 0;
     let failedCount = 0;
@@ -25,6 +28,19 @@ export class DiagnosticRunner {
     let erroredCount = 0;
 
     for (const rule of allRules) {
+      const override = ruleConfigs[rule.id];
+      if (override && override.enabled === false) {
+        skippedCount++;
+        results.push({
+          ruleId: rule.id,
+          status: 'SKIP',
+          executionTimeMs: 0,
+          message: `Skipped: rule "${rule.id}" disabled via configuration`,
+          findings: []
+        });
+        continue;
+      }
+
       // Category filter check
       if (requestedCategories && requestedCategories.length > 0 && !requestedCategories.includes(rule.category)) {
         skippedCount++;
@@ -74,6 +90,13 @@ export class DiagnosticRunner {
         const duration = Date.now() - ruleStart;
         result.executionTimeMs = duration;
 
+        // Apply severity override if configured
+        if (override?.severity) {
+          for (const f of result.findings) {
+            f.severity = override.severity;
+          }
+        }
+
         // Redact any sensitive information in findings
         const sanitizedFindings = result.findings.map((finding) => this.sanitizeFinding(finding));
         result.findings = sanitizedFindings;
@@ -122,27 +145,50 @@ export class DiagnosticRunner {
     }[] = [];
 
     if (context.authorizationGranted && !context.dryRun) {
+      const patchesToBatch: { findingId: string; patch: PatchOperation }[] = [];
+
       for (const finding of allFindings) {
-        if (finding.repairable) {
+        if (finding.repairable && finding.proposedPatch) {
+          patchesToBatch.push({ findingId: finding.id, patch: finding.proposedPatch });
+        } else if (finding.repairable) {
+          // Fallback to rule.repair if no proposedPatch
           const rule = this.registry.getRule(finding.ruleId);
           if (rule && rule.repair) {
             try {
               const success = await rule.repair(context, finding);
               repairsApplied.push({
                 findingId: finding.id,
-                filePath: finding.proposedPatch?.filePath || 'unknown',
+                filePath: 'unknown',
                 description: finding.recommendedCorrection,
                 success: Boolean(success)
               });
             } catch (err) {
               repairsApplied.push({
                 findingId: finding.id,
-                filePath: finding.proposedPatch?.filePath || 'unknown',
+                filePath: 'unknown',
                 description: `Repair error: ${String(err)}`,
                 success: false
               });
             }
           }
+        }
+      }
+
+      if (patchesToBatch.length > 0) {
+        const batchResult = SafeRepairEngine.applyBatchPatches(
+          patchesToBatch.map((p) => p.patch),
+          { workspaceRoot: context.workspaceRoot }
+        );
+
+        for (let i = 0; i < batchResult.repairs.length; i++) {
+          const rep = batchResult.repairs[i]!;
+          const correspondingFinding = patchesToBatch[i]?.findingId || 'unknown';
+          repairsApplied.push({
+            findingId: correspondingFinding,
+            filePath: rep.filePath,
+            description: rep.description,
+            success: rep.success
+          });
         }
       }
     }

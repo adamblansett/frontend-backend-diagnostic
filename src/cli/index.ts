@@ -15,23 +15,31 @@ USAGE:
 COMMANDS:
   scan [path]         Scan workspace for integration defects, CORS errors, URL issues, env leaks, and contract mismatches.
   probe <url>         Perform an active 15-stage live request trace against an endpoint.
-  contract [path]     Validate agreement between frontend client calls and backend route definitions.
+  contract [path]     Validate agreement between frontend client calls, backend route definitions, and OpenAPI specs.
   help                Display this help message.
 
 OPTIONS FOR 'scan':
-  --format <fmt>      Output format: 'console' (default), 'markdown', or 'json'.
+  --format <fmt>      Output format: 'console' (default), 'markdown', 'json', or 'sarif'.
   --output <file>     Write report to the specified file path.
   --fix               Apply safe, verified automated repairs where available.
   --dry-run           Preview unified diffs of proposed repairs without modifying files.
   --categories <cat>  Comma-separated category filters (e.g., API_CLIENT_CONFIGURATION,AUTHENTICATION_SECURITY).
+  --ignore <paths>    Comma-separated file path substrings or patterns to ignore.
+  --watch             Watch files for changes and re-run diagnostics automatically.
   --strict            Exit with code 1 if any warning, failure, or error is found.
   --verbose           Enable detailed debug logging.
+
+OPTIONS FOR 'probe':
+  --method <method>   HTTP method to probe: GET (default), POST, PUT, DELETE.
+  --origin <origin>   Custom Origin header for CORS preflight testing (e.g. http://localhost:3000).
 
 EXAMPLES:
   fbd scan .
   fbd scan ./my-project --format markdown --output diagnostic-report.md
+  fbd scan ./my-project --format sarif --output results.sarif
   fbd scan ./my-project --dry-run
   fbd scan ./my-project --fix
+  fbd scan ./my-project --watch
   fbd probe http://localhost:3000/api/users --method GET
   fbd contract ./my-project
 `);
@@ -47,7 +55,7 @@ async function main(): Promise<void> {
   }
 
   if (command === '--version' || args.includes('-v')) {
-    console.log('frontend-backend-diagnostic v1.0.0');
+    console.log('frontend-backend-diagnostic v1.1.0');
     process.exit(0);
   }
 
@@ -55,12 +63,17 @@ async function main(): Promise<void> {
     if (command === 'scan') {
       const targetPath = args[1] && !args[1].startsWith('--') ? args[1] : undefined;
       const formatIdx = args.indexOf('--format');
-      const format = formatIdx !== -1 && args[formatIdx + 1] ? (args[formatIdx + 1] as 'console' | 'markdown' | 'json') : 'console';
+      const format = formatIdx !== -1 && args[formatIdx + 1] ? (args[formatIdx + 1] as 'console' | 'markdown' | 'json' | 'sarif') : 'console';
       const outputIdx = args.indexOf('--output');
       const output = outputIdx !== -1 ? args[outputIdx + 1] : undefined;
       const categoriesIdx = args.indexOf('--categories');
       const categories = categoriesIdx !== -1 && args[categoriesIdx + 1]
         ? (args[categoriesIdx + 1]!.split(',') as DiagnosticCategory[])
+        : undefined;
+
+      const ignoreIdx = args.indexOf('--ignore');
+      const ignore = ignoreIdx !== -1 && args[ignoreIdx + 1]
+        ? args[ignoreIdx + 1]!.split(',')
         : undefined;
 
       const code = await runScanCommand({
@@ -70,6 +83,8 @@ async function main(): Promise<void> {
         fix: args.includes('--fix'),
         dryRun: args.includes('--dry-run'),
         categories,
+        ignore,
+        watch: args.includes('--watch'),
         strict: args.includes('--strict'),
         verbose: args.includes('--verbose')
       });
@@ -82,7 +97,10 @@ async function main(): Promise<void> {
       }
       const methodIdx = args.indexOf('--method');
       const method = methodIdx !== -1 && args[methodIdx + 1] ? (args[methodIdx + 1] as 'GET' | 'POST' | 'PUT' | 'DELETE') : 'GET';
-      const code = await runProbeCommand({ url, method });
+      const originIdx = args.indexOf('--origin');
+      const origin = originIdx !== -1 ? args[originIdx + 1] : undefined;
+
+      const code = await runProbeCommand({ url, method, origin });
       process.exit(code);
     } else if (command === 'contract') {
       const targetPath = args[1] && !args[1].startsWith('--') ? args[1] : undefined;

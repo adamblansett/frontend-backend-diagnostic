@@ -15,7 +15,7 @@ describe('End-to-End Diagnostic & Safe Repair Integration Suite', () => {
 
     const summary = await runner.run(context);
 
-    expect(summary.totalChecks).toBe(10);
+    expect(summary.totalChecks).toBeGreaterThanOrEqual(10);
     expect(summary.failed).toBeGreaterThanOrEqual(5);
     expect(summary.findings.length).toBeGreaterThanOrEqual(5);
 

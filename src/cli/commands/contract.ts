@@ -9,10 +9,13 @@ export async function runContractCommand(targetPath?: string): Promise<number> {
   const context = await ProjectDetector.scanWorkspace(targetDir);
   const backendRoutes = ContractValidator.extractBackendRoutes(context.backendFiles);
   const clientCalls = ContractValidator.extractFrontendCalls(context.frontendFiles);
+  const openApiPaths = context.detectedFrameworks.openApiPaths || [];
 
-  console.log(`Discovered ${backendRoutes.length} backend route(s) and ${clientCalls.length} frontend client call(s).\n`);
+  console.log(
+    `Discovered ${backendRoutes.length} backend route(s), ${clientCalls.length} frontend client call(s), and ${openApiPaths.length} OpenAPI specification(s).\n`
+  );
 
-  const findings = ContractValidator.compareContracts(clientCalls, backendRoutes);
+  const findings = ContractValidator.compareContracts(clientCalls, backendRoutes, openApiPaths);
 
   if (findings.length === 0) {
     console.log('✅ API Contract Verification Passed: No route, method, or response field discrepancies detected.\n');

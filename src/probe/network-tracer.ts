@@ -24,6 +24,12 @@ export interface StageVerification {
   details: string;
 }
 
+export interface NetworkTimings {
+  ttfbMs: number;
+  downloadMs: number;
+  totalMs: number;
+}
+
 export interface TraceResult {
   url: string;
   method: string;
@@ -33,6 +39,7 @@ export interface TraceResult {
   durationMs: number;
   statusCode?: number;
   headers?: Record<string, string>;
+  timings?: NetworkTimings;
   findings: DiagnosticFinding[];
 }
 
@@ -48,6 +55,9 @@ export class NetworkTracer {
       body?: string;
       timeoutMs?: number;
       expectedSchemaFields?: string[];
+      checkCors?: boolean;
+      origin?: string;
+      auditHeaders?: boolean;
     } = {}
   ): Promise<TraceResult> {
     const startTime = Date.now();
@@ -77,10 +87,59 @@ export class NetworkTracer {
       details: `Configured API client for ${method} ${url}`
     });
 
+    // Optional CORS preflight check if requested or origin specified
+    if (options.checkCors || options.origin) {
+      const probeOrigin = options.origin || 'http://localhost:3000';
+      try {
+        const preflightRes = await fetch(url, {
+          method: 'OPTIONS',
+          headers: {
+            'Origin': probeOrigin,
+            'Access-Control-Request-Method': method,
+            'Access-Control-Request-Headers': 'content-type, authorization'
+          },
+          signal: AbortSignal.timeout(3000)
+        });
+
+        const allowOrigin = preflightRes.headers.get('access-control-allow-origin');
+        if (!allowOrigin || (allowOrigin !== '*' && allowOrigin !== probeOrigin)) {
+          findings.push({
+            id: `FINDING-TRC-CORS-01`,
+            ruleId: 'PREFLIGHT_CORS_FAILURE',
+            title: `CORS preflight OPTIONS failed or omitted Access-Control-Allow-Origin on ${url}`,
+            severity: 'HIGH',
+            category: 'AUTHENTICATION_SECURITY',
+            affectedComponent: 'Backend CORS Preflight',
+            affectedEndpoint: url,
+            symptoms: [`Preflight OPTIONS request did not grant access for Origin: ${probeOrigin}`],
+            evidence: {
+              description: 'Preflight response missing matching Access-Control-Allow-Origin header',
+              url,
+              httpStatus: preflightRes.status
+            },
+            reproductionSteps: [`Send OPTIONS preflight to ${url} with Origin: ${probeOrigin}`],
+            expectedBehavior: `Access-Control-Allow-Origin: ${probeOrigin} returned with status 200/204`,
+            actualBehavior: `Origin ${probeOrigin} not permitted: allowOrigin was "${allowOrigin}"`,
+            rootCause: 'CORS middleware does not handle OPTIONS preflight or does not whitelist request origin',
+            confidenceLevel: 'HIGH',
+            impact: 'Browser blocks cross-origin requests before execution',
+            recommendedCorrection: `Configure CORS middleware to allow origin "${probeOrigin}" and handle OPTIONS requests`,
+            regressionTestRequirements: ['Preflight OPTIONS test verifies CORS headers'],
+            repairable: false
+          });
+        }
+      } catch {
+        // Preflight connection failed; main request will report connection failure
+      }
+    }
+
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
 
     let res: Response;
+    const fetchStart = Date.now();
+    let ttfbMs = 0;
+
     try {
       res = await fetch(url, {
         method,
@@ -88,6 +147,7 @@ export class NetworkTracer {
         body: options.body,
         signal: controller.signal
       });
+      ttfbMs = Date.now() - fetchStart;
       clearTimeout(timer);
     } catch (err: unknown) {
       clearTimeout(timer);
@@ -156,8 +216,36 @@ export class NetworkTracer {
     // Check status codes
     const responseHeaders: Record<string, string> = {};
     res.headers.forEach((val, key) => {
-      responseHeaders[key] = val;
+      responseHeaders[key.toLowerCase()] = val;
     });
+
+    // Audit critical security headers if requested
+    if (options.auditHeaders && !responseHeaders['x-content-type-options']) {
+      findings.push({
+        id: `FINDING-TRC-HDR-NOSNIFF`,
+        ruleId: 'MISSING_X_CONTENT_TYPE_OPTIONS',
+        title: `Response missing X-Content-Type-Options: nosniff header on ${url}`,
+        severity: 'LOW',
+        category: 'AUTHENTICATION_SECURITY',
+        affectedComponent: 'HTTP Response Headers',
+        affectedEndpoint: url,
+        symptoms: ['Browser MIME-sniffing could execute uploaded content as script'],
+        evidence: {
+          description: 'X-Content-Type-Options header omitted',
+          url,
+          headers: responseHeaders
+        },
+        reproductionSteps: [`Send ${method} ${url} and inspect headers`],
+        expectedBehavior: 'Response includes X-Content-Type-Options: nosniff',
+        actualBehavior: 'Header is absent',
+        rootCause: 'Security middleware (e.g. helmet) not configured',
+        confidenceLevel: 'HIGH',
+        impact: 'Increases exposure to MIME confusion attacks',
+        recommendedCorrection: 'Add res.setHeader("X-Content-Type-Options", "nosniff")',
+        regressionTestRequirements: ['Assert response headers contain x-content-type-options: nosniff'],
+        repairable: false
+      });
+    }
 
     if (res.status === 404) {
       stages.push({
@@ -201,6 +289,7 @@ export class NetworkTracer {
         durationMs: Date.now() - startTime,
         statusCode: res.status,
         headers: responseHeaders,
+        timings: { ttfbMs, downloadMs: 0, totalMs: Date.now() - startTime },
         findings
       };
     }
@@ -246,6 +335,7 @@ export class NetworkTracer {
         durationMs: Date.now() - startTime,
         statusCode: res.status,
         headers: responseHeaders,
+        timings: { ttfbMs, downloadMs: 0, totalMs: Date.now() - startTime },
         findings
       };
     }
@@ -291,6 +381,7 @@ export class NetworkTracer {
         durationMs: Date.now() - startTime,
         statusCode: res.status,
         headers: responseHeaders,
+        timings: { ttfbMs, downloadMs: 0, totalMs: Date.now() - startTime },
         findings
       };
     }
@@ -328,6 +419,7 @@ export class NetworkTracer {
     });
 
     // Stage 13: Response parsing
+    const bodyStart = Date.now();
     let parsedBody: Record<string, unknown> | null = null;
     const contentType = res.headers.get('content-type') || '';
     if (contentType.includes('application/json')) {
@@ -352,6 +444,8 @@ export class NetworkTracer {
         details: `Non-JSON response received: ${contentType}`
       });
     }
+
+    const downloadMs = Date.now() - bodyStart;
 
     // Check expected schema fields if provided
     if (parsedBody && options.expectedSchemaFields) {
@@ -396,13 +490,16 @@ export class NetworkTracer {
       details: 'UI rendering verified'
     });
 
+    const totalMs = Date.now() - startTime;
+
     return {
       url,
       method,
       stages,
-      durationMs: Date.now() - startTime,
+      durationMs: totalMs,
       statusCode: res.status,
       headers: responseHeaders,
+      timings: { ttfbMs, downloadMs, totalMs },
       findings
     };
   }

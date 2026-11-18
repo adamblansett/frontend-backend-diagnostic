@@ -1,6 +1,8 @@
 export async function fetchUsers() {
   try {
-    const res = await fetch('/api/v1/users');
+    const res = await fetch('/api/v1/users', {
+      signal: AbortSignal.timeout(5000)
+    });
     if (!res.ok) {
       throw new Error(`Failed to fetch users: HTTP ${res.status}`);
     }
@@ -15,7 +17,8 @@ export async function createUser(userData: { name: string; email: string }) {
   const res = await fetch('/api/v1/users', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(userData)
+    body: JSON.stringify(userData),
+    signal: AbortSignal.timeout(5000)
   });
   if (!res.ok) {
     throw new Error(`Failed to create user: HTTP ${res.status}`);
