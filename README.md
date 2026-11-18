@@ -136,7 +136,7 @@ fbd init --force
 
 ## 5. Diagnostic Rule Catalog
 
-`fbd` includes 16 modular, decoupled rules categorized by integration layer:
+`fbd` includes 19 modular, decoupled rules categorized by integration layer:
 
 | Rule ID | Category | Severity | Description | Auto-Repair |
 | :--- | :--- | :--- | :--- | :---: |
@@ -150,6 +150,9 @@ fbd init --force
 | `BE-HLT-001` | `DATABASE_DEPENDENCIES` | MEDIUM | Verifies presence of operational health check endpoints (`/health`, `/healthz`, `/status`) | No |
 | `SEC-INJ-001` | `AUTHENTICATION_SECURITY` | CRITICAL | Detects raw SQL queries formed with string concatenation or unparameterized template interpolation | No |
 | `SEC-HDR-001` | `AUTHENTICATION_SECURITY` | HIGH | Flags backend server entrypoints omitting standard HTTP security headers (Helmet / HSTS / nosniff) | No |
+| `SEC-RATE-001` | `AUTHENTICATION_SECURITY` | HIGH | Flags sensitive authentication/credential endpoints lacking rate limiting middleware | No |
+| `SEC-REDIR-001` | `AUTHENTICATION_SECURITY` | HIGH | Flags open / unvalidated client redirects using unsanitized request parameters | No |
+| `SEC-LEAK-001` | `ERROR_HANDLING` | HIGH | Flags unconditional stack trace exposure in error responses without production environment guards | No |
 | `SEC-CSRF-001` | `AUTHENTICATION_SECURITY` | HIGH | Detects mutation routes reading cookies without CSRF validation middleware or SameSite protection | No |
 | `SEC-STORE-001` | `AUTHENTICATION_SECURITY` | HIGH | Detects sensitive credentials (tokens, JWTs, secrets) stored in browser `localStorage` or `sessionStorage` | No |
 | `NET-CACHE-001` | `CACHING_STATE_MANAGEMENT` | MEDIUM | Detects state mutations returning public Cache-Control headers causing stale responses from proxies | No |

@@ -8,6 +8,9 @@ import { runRollbackCommand } from '../src/cli/commands/rollback.js';
 import { NetworkTracer } from '../src/probe/network-tracer.js';
 import { SqlInjectionRule } from '../src/rules/security/sql-injection.js';
 import { MissingSecurityHeadersRule } from '../src/rules/security/missing-security-headers.js';
+import { RateLimitingRule } from '../src/rules/security/rate-limiting.js';
+import { OpenRedirectRule } from '../src/rules/security/open-redirect.js';
+import { StackTraceLeakageRule } from '../src/rules/security/stack-trace-leakage.js';
 import { ProjectDetector } from '../src/detectors/project-detector.js';
 
 describe('Security Upgrades Suite', () => {
@@ -171,6 +174,90 @@ describe('Security Upgrades Suite', () => {
       expect(res.findings.length).toBe(1);
       expect(res.findings[0].ruleId).toBe('SEC-HDR-001');
       expect(res.findings[0].severity).toBe('HIGH');
+    });
+
+    it('RateLimitingRule flags sensitive auth endpoint lacking rate limiter', async () => {
+      const backendDir = path.join(tempDir, 'backend');
+      fs.mkdirSync(backendDir, { recursive: true });
+      const authFile = path.join(backendDir, 'auth.ts');
+      fs.writeFileSync(
+        authFile,
+        `app.post('/api/auth/login', (req, res) => res.json({ token: 'xyz' }));`,
+        'utf8'
+      );
+
+      const res = await RateLimitingRule.execute({
+        workspaceRoot: tempDir,
+        detectedFrameworks: { backend: 'Express', apiType: 'REST' },
+        frontendFiles: [],
+        backendFiles: [authFile],
+        envFiles: [],
+        configFiles: [],
+        interactive: false,
+        authorizationGranted: false,
+        dryRun: false,
+        options: {}
+      });
+
+      expect(res.status).toBe('FAIL');
+      expect(res.findings.length).toBe(1);
+      expect(res.findings[0].ruleId).toBe('SEC-RATE-001');
+    });
+
+    it('OpenRedirectRule flags unvalidated user redirection', async () => {
+      const backendDir = path.join(tempDir, 'backend');
+      fs.mkdirSync(backendDir, { recursive: true });
+      const redirectFile = path.join(backendDir, 'redirect.ts');
+      fs.writeFileSync(
+        redirectFile,
+        `app.get('/logout', (req, res) => { res.redirect(req.query.returnTo); });`,
+        'utf8'
+      );
+
+      const res = await OpenRedirectRule.execute({
+        workspaceRoot: tempDir,
+        detectedFrameworks: { backend: 'Express', apiType: 'REST' },
+        frontendFiles: [],
+        backendFiles: [redirectFile],
+        envFiles: [],
+        configFiles: [],
+        interactive: false,
+        authorizationGranted: false,
+        dryRun: false,
+        options: {}
+      });
+
+      expect(res.status).toBe('FAIL');
+      expect(res.findings.length).toBe(1);
+      expect(res.findings[0].ruleId).toBe('SEC-REDIR-001');
+    });
+
+    it('StackTraceLeakageRule flags error handlers transmitting err.stack without NODE_ENV check', async () => {
+      const backendDir = path.join(tempDir, 'backend');
+      fs.mkdirSync(backendDir, { recursive: true });
+      const errorFile = path.join(backendDir, 'error.ts');
+      fs.writeFileSync(
+        errorFile,
+        `app.use((err, req, res, next) => { res.status(500).json({ error: err.message, stack: err.stack }); });`,
+        'utf8'
+      );
+
+      const res = await StackTraceLeakageRule.execute({
+        workspaceRoot: tempDir,
+        detectedFrameworks: { backend: 'Express', apiType: 'REST' },
+        frontendFiles: [],
+        backendFiles: [errorFile],
+        envFiles: [],
+        configFiles: [],
+        interactive: false,
+        authorizationGranted: false,
+        dryRun: false,
+        options: {}
+      });
+
+      expect(res.status).toBe('FAIL');
+      expect(res.findings.length).toBe(1);
+      expect(res.findings[0].ruleId).toBe('SEC-LEAK-001');
     });
   });
 });
